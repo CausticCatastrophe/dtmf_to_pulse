@@ -16,6 +16,9 @@ https://github.com/curlymorphic
 
 MarCNet (for the tip with disabling interrupts while writing to the queue)
 
+Keith
+https://github.com/keith-aykira (Helping with statemachine control flow)
+
 */
 
 #include <Arduino.h>
