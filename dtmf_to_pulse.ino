@@ -52,7 +52,7 @@ char g_dial_buffer[DIAL_BUFFER_LEN] = "";
 int buffer_position = 0;
 
 // Interrupt flag that says if the dtmf has new goodies
-volatile bool dtmf_received = false; 
+volatile bool dtmf_received = false;
 
 // Stores a hangup state
 bool is_hung_up = true;
@@ -86,7 +86,7 @@ void loop() {
   // TESTING FOR MANUAL INTERRUPT
   /*
   if (!done){
-    if (millis() > 4000) 
+    if (millis() > 4000)
     {
       Serial.println("before interrupt call");
       // testy test for the interrupts
@@ -106,7 +106,7 @@ void loop() {
     // Prevent queue being modified while we're reading stuff
     noInterrupts();
 
-    // add_key() will add the given key to the queue. 
+    // add_key() will add the given key to the queue.
     // read_dtmf_inputs() will read the input pins and output the char (0-9, #, *)
     add_key(read_dtmf_inputs());
 
@@ -130,14 +130,11 @@ void loop() {
 void pulse_exchange(char buf[], int num_chars) {
   for(int i = 0; i < num_chars; i++) {
     switch (buf[i]) {
-      case 'E':
-        Serial.println("Read 'E' from buffer. There was an error reading MT7880 digital pins.");
-        break;
       case '#':
         hang_up();
         break;
       case '*':
-        // TODO: Implement me. (Or not im not your dad).     
+        // TODO: Implement me. (Or not im not your dad).
         break;
       case '0':
         number_pulse_out(10);
@@ -161,13 +158,10 @@ void pulse_exchange(char buf[], int num_chars) {
 }
 
 void number_pulse_out(int number_pressed) {
-  // Simulate a phone pickup
-  digitalWrite(PULSE_PIN, LOW);
-  delay(interdigit_gap);
-  is_hung_up = false;
-
   Serial.print("Dialing digit: ");
   Serial.println(number_pressed);
+
+  pick_up_phone();
 
   // Send an appropriate pulse out for the specified number.
   for (int i = 0; i < number_pressed; i++)
@@ -180,6 +174,13 @@ void number_pulse_out(int number_pressed) {
 
   // Keep track of when we're finished pulsing the output, so we can detect idle state
   pulse_done_time = millis();
+}
+
+void pick_up_phone() {
+  // Simulate a phone pickup
+  digitalWrite(PULSE_PIN, LOW);
+  delay(interdigit_gap);
+  is_hung_up = false;
 }
 
 void hang_up() {
@@ -219,7 +220,7 @@ char read_dtmf_inputs() {
   Serial.println();
 
   uint8_t number_pressed;
-  
+
   // Is a small delay to let the digitalRead pins latch needed if listening to the StD signal?
   delay(50);
 
@@ -232,59 +233,17 @@ char read_dtmf_inputs() {
      (digitalRead(q1_pin) << 3)
   );
 
-  switch (number_pressed)
-  {
-    case 0x01:
-      Serial.println("Button Pressed =  1");
-      return '1';
-      break;
-    case 0x02:
-      Serial.println("Button Pressed =  2");
-      return '2';
-      break;
-    case 0x03:
-      Serial.println("Button Pressed =  3");
-      return '3';
-      break;
-    case 0x04:
-    Serial.println("Button Pressed =  4");
-      return '4';
-      break;
-    case 0x05:
-      Serial.println("Button Pressed =  5");
-      return '5';
-      break;
-    case 0x06:
-      Serial.println("Button Pressed =  6");
-      return '6';
-      break;
-    case 0x07:
-      Serial.println("Button Pressed =  7");
-      return '7';
-      break;
-    case 0x08:
-      Serial.println("Button Pressed =  8");
-      return '8';
-      break;
-    case 0x09:
-      Serial.println("Button Pressed =  9");
-      return '9';
-      break;
-    case 0x0A:
-      Serial.println("Button Pressed =  0");
-      return '0';
-      break;
-    case 0x0B:
-      Serial.println("Button Pressed =  *");
-      return '*';
-      break;
-    case 0x0C:
-      Serial.println("Button Pressed =  #");
-      return '#';
-      break;
-  }
-  Serial.println("Erroneous button press");
-  return 'E';
+  // Place the number and terminating null character into the local input buffer
+  char ascii_buffer[8];
+
+  // Convert from integer into ASCII char array
+  itoa(number_pressed, ascii_buffer, 10);
+
+  Serial.println("Button pressed: ");
+  Serial.print(ascii_buffer);
+
+  // Return the char value without the null terminating byte (first character of buffer)
+  return(ascii_buffer[0]);
 }
 
 void add_key(char key){
