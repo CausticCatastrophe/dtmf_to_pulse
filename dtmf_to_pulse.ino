@@ -20,9 +20,16 @@ MarCNet (for the tip with disabling interrupts while writing to the queue)
 
 #include <Arduino.h>
 
-#define PULSE_PIN 8 // The pin on the arduino that send out the pulse code.
-const float mult_time = 4; // use this to slow down the output for testing.
+// PIN DEFINITIONS
+#define PULSE_PIN 7 // The pin on the arduino that send out the pulse code.
+#define stq_pin 2 //for nano, can only use D2 or D3 for interrupt pins.
+#define q1_pin 3
+#define q2_pin 4
+#define q3_pin 5
+#define q4_pin 6
 
+// Time constants
+const float mult_time = 4; // use this to slow down the output for testing.
 const int pulse_length_make = 33 * mult_time;
 const int pulse_length_break = 66 * mult_time;
 const int pulse_hangup_delay = 1000; // the time taken for a hangup.
@@ -49,13 +56,6 @@ volatile bool dtmf_received = false;
 
 // Stores a hangup state
 bool is_hung_up = true;
-
-// PIN DEFINITIONS
-#define stq_pin 3 //for nano, can only use D2 or D3 for interrupt pins.
-#define q1_pin 4
-#define q2_pin 5
-#define q3_pin 6
-#define q4_pin 7
 
 // Declare functions
 void dtmf_interrupt();
