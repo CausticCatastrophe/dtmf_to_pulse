@@ -122,8 +122,7 @@ void loop() {
   }
 
   // Hang up if the user hasnt pushed keys in the allotted time.
-  if ( pulse_done_time > 0 && ( ( millis() - pulse_done_time ) > user_idle_timeout ) )
-  {
+  if ( pulse_done_time > 0 && ( ( millis() - pulse_done_time ) > user_idle_timeout ) ) {
     hang_up();
   }
 }
@@ -131,6 +130,9 @@ void loop() {
 void pulse_exchange(char buf[], int num_chars) {
   for(int i = 0; i < num_chars; i++) {
     switch (buf[i]) {
+      case 'E':
+        Serial.println("Read 'E' from buffer. There was an error reading MT7880 digital pins.");
+        break;
       case '#':
         hang_up();
         break;
@@ -143,18 +145,30 @@ void pulse_exchange(char buf[], int num_chars) {
       default:
         // Convert from ascii char to int
         int count = buf[i] - 0x30;
+
+        if (count < 0 || count > 9) {
+          Serial.println("Invalid character in buffer.");
+          Serial.print("buf[");
+          Serial.print(i);
+          Serial.print("] = ");
+          Serial.println(buf[i]);
+        }
+
         number_pulse_out(count);
         break;
     }
   }
 }
 
-void number_pulse_out(int number_pressed) 
-{
+void number_pulse_out(int number_pressed) {
   // Simulate a phone pickup
   digitalWrite(PULSE_PIN, LOW);
   delay(interdigit_gap);
   is_hung_up = false;
+
+  Serial.print("Dialing digit: ");
+  Serial.println(number_pressed);
+
   // Send an appropriate pulse out for the specified number.
   for (int i = 0; i < number_pressed; i++)
   {
@@ -163,17 +177,19 @@ void number_pulse_out(int number_pressed)
     digitalWrite(PULSE_PIN, LOW);
     delay(pulse_length_break);
   }
+
+  // Keep track of when we're finished pulsing the output, so we can detect idle state
   pulse_done_time = millis();
 }
 
-void hang_up()
-{
+void hang_up() {
   if (is_hung_up){
     return;
   }
   is_hung_up = true;
-  // Hang up when startup
-  Serial.println("hangup signal");
+
+  Serial.println("Hang up");
+
   digitalWrite(PULSE_PIN, HIGH);
   delay(pulse_hangup_delay);
   digitalWrite(PULSE_PIN, LOW);
@@ -191,7 +207,7 @@ void clear_buffer() {
 
 void dtmf_interrupt() {
   // Set flag, avoid function calls in interrupt
-  dtmf_received = 1;
+  dtmf_received = true;
 }
 
 /*
@@ -203,10 +219,19 @@ char read_dtmf_inputs() {
   Serial.println();
 
   uint8_t number_pressed;
-  delay(250);
+  
+  // Is a small delay to let the digitalRead pins latch needed if listening to the StD signal?
+  delay(50);
 
   // Checks q1,q2,q3,q4 to see what number is pressed.
-  number_pressed = ( 0x00 | (digitalRead(q4_pin)<<0) | (digitalRead(q3_pin)<<1) | (digitalRead(q2_pin)<<2) | (digitalRead(q1_pin)<<3) );
+  number_pressed = (
+    0x00 |
+     (digitalRead(q4_pin) << 0) |
+     (digitalRead(q3_pin) << 1) |
+     (digitalRead(q2_pin) << 2) |
+     (digitalRead(q1_pin) << 3)
+  );
+
   switch (number_pressed)
   {
     case 0x01:
@@ -263,8 +288,21 @@ char read_dtmf_inputs() {
 }
 
 void add_key(char key){
+  bool valid_key = (key >= '0' && key <= '9') || key == '#' || key == '*';
+
+  if (!valid_key) {
+    Serial.print("Invalid key: ");
+    Serial.println(key);
+    return;
+  }
+
+  Serial.print("Add key to buffer: ");
+  Serial.println(key);
+
   g_dial_buffer[buffer_position] = key;
   buffer_position++;
+
+  Serial.print("g_dial_buffer = ");
   Serial.println(g_dial_buffer);
 }
   
