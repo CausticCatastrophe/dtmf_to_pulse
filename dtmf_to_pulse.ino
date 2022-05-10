@@ -29,7 +29,7 @@ MarCNet (for the tip with disabling interrupts while writing to the queue)
 #define q4_pin 6
 
 // Time constants
-const float mult_time = 4; // use this to slow down the output for testing.
+const float mult_time = 1; // use this to slow down the output for testing.
 const int pulse_length_make = 33 * mult_time;
 const int pulse_length_break = 66 * mult_time;
 const int pulse_hangup_delay = 1000; // the time taken for a hangup.
