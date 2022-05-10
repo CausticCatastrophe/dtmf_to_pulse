@@ -51,7 +51,7 @@ const int DIAL_BUFFER_LEN = 32;
 char g_dial_buffer[DIAL_BUFFER_LEN] = "";
 int buffer_position = 0;
 
-// interrupt flag that says if the dtmf has new goodies
+// Interrupt flag that says if the dtmf has new goodies
 volatile bool dtmf_received = false; 
 
 // Stores a hangup state
@@ -68,7 +68,7 @@ void setup() {
   Serial.begin(9600);
   Serial.println("Hello, im alive!");
 
-  /*Define input pins for DTMF Decoder pins connection */
+  // Define input pins for DTMF Decoder pins connection
   pinMode(stq_pin, INPUT); // connect to Std pin
   pinMode(q4_pin, INPUT); // connect to Q4 pin
   pinMode(q3_pin, INPUT); // connect to Q3 pin
@@ -103,7 +103,7 @@ void loop() {
     // Persist this time, so we know the last time we have received a dial.
     last_dialed_time = millis();
 
-    //Prevent queue being modified while we're reading stuff
+    // Prevent queue being modified while we're reading stuff
     noInterrupts();
 
     // add_key() will add the given key to the queue. 
@@ -141,7 +141,7 @@ void pulse_exchange(char buf[], int num_chars) {
         number_pulse_out(10);
         break;
       default:
-        //convert from ascii char to int
+        // Convert from ascii char to int
         int count = buf[i] - 0x30;
         number_pulse_out(count);
         break;
@@ -155,7 +155,7 @@ void number_pulse_out(int number_pressed)
   digitalWrite(PULSE_PIN, LOW);
   delay(interdigit_gap);
   is_hung_up = false;
-  // send an appropriate pulse out for the specified number.
+  // Send an appropriate pulse out for the specified number.
   for (int i = 0; i < number_pressed; i++)
   {
     digitalWrite(PULSE_PIN, HIGH);
@@ -172,7 +172,7 @@ void hang_up()
     return;
   }
   is_hung_up = true;
-  // hang up when startup
+  // Hang up when startup
   Serial.println("hangup signal");
   digitalWrite(PULSE_PIN, HIGH);
   delay(pulse_hangup_delay);
@@ -205,7 +205,7 @@ char read_dtmf_inputs() {
   uint8_t number_pressed;
   delay(250);
 
-  // checks q1,q2,q3,q4 to see what number is pressed.
+  // Checks q1,q2,q3,q4 to see what number is pressed.
   number_pressed = ( 0x00 | (digitalRead(q4_pin)<<0) | (digitalRead(q3_pin)<<1) | (digitalRead(q2_pin)<<2) | (digitalRead(q1_pin)<<3) );
   switch (number_pressed)
   {
