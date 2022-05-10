@@ -36,7 +36,7 @@ const int pulse_hangup_delay = 1000; // the time taken for a hangup.
 const int interdigit_gap = 300; // the time between digits when sending out.
 
 // Timeouts
-const int user_idle_timeout = 60*1000*15; // 15 minutes
+const unsigned long user_idle_timeout = 60 * 1000 * 15; // 15 minutes
 const int DIAL_DONE_TIMEOUT_MS = 2000;
 unsigned long pulse_done_time = 0;
 
