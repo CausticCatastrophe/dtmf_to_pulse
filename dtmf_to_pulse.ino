@@ -55,7 +55,7 @@ int buffer_position = 0;
 volatile bool dtmf_received = false;
 
 // Stores a hangup state
-bool is_hung_up = true;
+bool is_hung_up = false;
 
 // Declare functions
 void dtmf_interrupt();
