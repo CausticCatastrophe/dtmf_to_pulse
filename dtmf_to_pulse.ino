@@ -21,12 +21,12 @@ MarCNet (for the tip with disabling interrupts while writing to the queue)
 #include <Arduino.h>
 
 // PIN DEFINITIONS
-#define PULSE_PIN 7 // The pin on the arduino that send out the pulse code.
-#define stq_pin 2 //for nano, can only use D2 or D3 for interrupt pins.
-#define q1_pin 3
-#define q2_pin 4
-#define q3_pin 5
-#define q4_pin 6
+#define PULSE_PIN 7 // The pin on the arduino that sends out the pulse code.
+#define stq_pin 2   // StD/StQ pin on the MT8870 DTMF. Nano can only have d2, d3 for interrupts.
+#define q1_pin 3    // q1 pin on the MT8870 DTMF
+#define q2_pin 4    // q2 pin on the MT8870 DTMF
+#define q3_pin 5    // q3 pin on the MT8870 DTMF
+#define q4_pin 6    // q4 pin on the MT8870 DTMF
 
 // Time constants
 const float mult_time = 1; // use this to slow down the output for testing.
