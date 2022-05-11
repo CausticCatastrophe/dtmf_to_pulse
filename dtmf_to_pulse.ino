@@ -18,6 +18,8 @@ https://github.com/curlymorphic
 
 MarCNet (for the tip with disabling interrupts while writing to the queue)
 
+DAX (help sorting out the * short-circuiting)
+
 */
 
 #include <Arduino.h>
@@ -26,29 +28,29 @@ MarCNet (for the tip with disabling interrupts while writing to the queue)
 # define DEBUG false
 
 // PIN DEFINITIONS
-#define PULSE_PIN 7 // The pin on the arduino that sends out the pulse code.
+#define PULSE_PIN 8 // The pin on the arduino that sends out the pulse code.
 
 // Delayed Steering (Output). Presents a logic high when a received tone-pair has been
 // registered and the output latch updated; returns to logic low when the voltage on St/GT falls
 // below VTSt.
-#define std_pin 2   // StD pin (ready signal) on the MT8870 DTMF decoder. Nano can only have d2, d3 for interrupts.
+#define std_pin 3   // StD pin (ready signal) on the MT8870 DTMF decoder. Nano can only have d2, d3 for interrupts.
 
-#define q1_pin 3    // q1 pin on the MT8870 DTMF - Most significant bit in 4-bit output
-#define q2_pin 4    // q2 pin on the MT8870 DTMF
-#define q3_pin 5    // q3 pin on the MT8870 DTMF
-#define q4_pin 6    // q4 pin on the MT8870 DTMF - Least significant bit in 4-bit output
+#define q1_pin 4    // q1 pin on the MT8870 DTMF - Most significant bit in 4-bit output
+#define q2_pin 5    // q2 pin on the MT8870 DTMF
+#define q3_pin 6    // q3 pin on the MT8870 DTMF
+#define q4_pin 7    // q4 pin on the MT8870 DTMF - Least significant bit in 4-bit output
 
 // Time constants
-const float mult_time = DEBUG ? 2.4 : 1; // use this to slow down the output for testing.
+const float mult_time = DEBUG ? 4 : 1; // use this to slow down the output for testing.
 
-const int pulse_length_make = 33 * mult_time;
-const int pulse_length_break = 66 * mult_time;
+const int pulse_length_make = 50 * mult_time;
+const int pulse_length_break = 50 * mult_time;
 const int pulse_hangup_delay = 1000; // the time taken for a hangup.
 const int interdigit_gap = 300; // the time between digits when sending out.
 
 // Timeouts
-const unsigned long user_idle_timeout = 60 * 1000 * 15; // 15 minutes
-const int DIAL_DONE_TIMEOUT_MS = 2000;
+const unsigned long user_idle_timeout = 60 * 1000 * 2; // 2 minutes
+const int DIAL_DONE_TIMEOUT_MS = 400;
 unsigned long pulse_done_time = 0;
 
 // The last time the user pressed the hash
@@ -78,8 +80,9 @@ void number_pulse_out(int);
 void setup() {
   Serial.begin(9600);
   Serial.println("Begin setup()");
-
+  
   // Define input pins for DTMF Decoder pins connection
+  pinMode(PULSE_PIN, OUTPUT);
   pinMode(std_pin, INPUT); // connect to Std pin
   pinMode(q4_pin, INPUT); // connect to Q4 pin
   pinMode(q3_pin, INPUT); // connect to Q3 pin
@@ -89,7 +92,7 @@ void setup() {
   // Attaches interrupt to set flag with dtmf_interrupt
   attachInterrupt(digitalPinToInterrupt(std_pin), dtmf_interrupt, RISING);
 
-  hang_up();
+  digitalWrite(PULSE_PIN, HIGH);
   Serial.println("Done setup()");
 }
 
@@ -99,6 +102,9 @@ void setup() {
  * Hang-up when idle.
  */
 void loop() {
+  // This indicates whether the dtmf code is a star.
+  bool star_pushed = false;
+
   if (dtmf_received) {
     // Resets interrupt flag for next input.
     dtmf_received = false;
@@ -113,24 +119,31 @@ void loop() {
     // read_mt8870() will read the input pins and output the char (0-9, #, *)
     char phone_character = read_mt8870();
     if (phone_character == '*') {
-      Serial.println("Ignoring * button.");
+      Serial.println("* button received.");
+      star_pushed = true;
+      // this is where we can impliment the end message with *
+      // send whats in the queue to pulse exchange.
     } else {
       add_key(phone_character);
     }
 
   }
-
+  
   // If enough time has elapsed since last DTMF, send buffer via pulses
-  if ((millis() - last_dialed_time) > DIAL_DONE_TIMEOUT_MS) {
+  bool afterOutputTime = ((millis() - last_dialed_time) > DIAL_DONE_TIMEOUT_MS);
+  if (afterOutputTime || star_pushed) {
     pulse_exchange(g_dial_buffer, buffer_position);
     buffer_position = 0;
     clear_buffer();
   }
 
   // Hang up if the user hasn't pushed keys in the allotted time.
-  if ( pulse_done_time > 0 && ( ( millis() - pulse_done_time ) > user_idle_timeout ) ) {
+  // Don't hang up if the time between the last DTMF received and 
+  // sending out the pulses has not expired.
+  if (afterOutputTime && (pulse_done_time > 0 && ( ( millis() - pulse_done_time ) > user_idle_timeout ) ) ) {
     hang_up();
   }
+
 }
 
 void pulse_exchange(char buf[], int num_chars) {
@@ -156,7 +169,6 @@ void pulse_exchange(char buf[], int num_chars) {
           Serial.print("] = ");
           Serial.println(buf[i]);
         }
-
         number_pulse_out(count);
         break;
     }
@@ -179,7 +191,8 @@ void number_pulse_out(int number_pressed) {
     digitalWrite(PULSE_PIN, LOW);
     delay(pulse_length_break);
   }
-  if (DEBUG) {
+  if (DEBUG) 
+  {
     Serial.println();
     Serial.println("Done pulsing digit.");
   }
@@ -196,11 +209,6 @@ void pick_up_phone() {
 }
 
 void hang_up() {
-  if (is_hung_up){
-    return;
-  }
-  is_hung_up = true;
-
   Serial.println("Hang up");
 
   digitalWrite(PULSE_PIN, HIGH);
@@ -209,6 +217,7 @@ void hang_up() {
   delay(pulse_hangup_delay);
   delay(pulse_hangup_delay);
   digitalWrite(PULSE_PIN, HIGH);
+  is_hung_up = true;
 }
 
 void clear_buffer() {
@@ -316,4 +325,3 @@ void add_key(char key){
   Serial.println(g_dial_buffer);
 
 }
-  
