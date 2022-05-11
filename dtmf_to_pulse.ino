@@ -79,7 +79,7 @@ void setup() {
   pinMode(q1_pin, INPUT); // connect to Q1 pin
 
   // Attaches interrupt to set flag with dtmf_interrupt
-  attachInterrupt(digitalPinToInterrupt(stq_pin), dtmf_interrupt, FALLING);
+  attachInterrupt(digitalPinToInterrupt(stq_pin), dtmf_interrupt, RISING);
 
   hang_up();
 }
