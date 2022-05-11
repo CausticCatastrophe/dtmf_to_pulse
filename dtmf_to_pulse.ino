@@ -1,8 +1,10 @@
 /*
-Convert output of DTMF converter to pulses for telephone exchange.
+Convert output of MT8870 DTMF converter to pulses for telephone exchange.
 for Look Mum No Computer
+
 https://www.patreon.com/posts/im-aware-this-66205770
 https://microcontrollerslab.com/mt8870-dtmf-decoder-module-pinout-interfacing-with-arduino-features/#Pin_Configuration
+https://www.microsemi.com/document-portal/doc_download/127041-mt8870d-datasheet-oct2006
 
 Cobbled together on a discord chat by:
 Caustic
@@ -16,23 +18,29 @@ https://github.com/curlymorphic
 
 MarCNet (for the tip with disabling interrupts while writing to the queue)
 
-Keith
-https://github.com/keith-aykira (Helping with statemachine control flow)
-
 */
 
 #include <Arduino.h>
 
+// Change me to false for production
+# define DEBUG false
+
 // PIN DEFINITIONS
 #define PULSE_PIN 7 // The pin on the arduino that sends out the pulse code.
-#define stq_pin 2   // StD/StQ pin on the MT8870 DTMF. Nano can only have d2, d3 for interrupts.
-#define q1_pin 3    // q1 pin on the MT8870 DTMF
+
+// Delayed Steering (Output). Presents a logic high when a received tone-pair has been
+// registered and the output latch updated; returns to logic low when the voltage on St/GT falls
+// below VTSt.
+#define std_pin 2   // StD pin (ready signal) on the MT8870 DTMF decoder. Nano can only have d2, d3 for interrupts.
+
+#define q1_pin 3    // q1 pin on the MT8870 DTMF - Most significant bit in 4-bit output
 #define q2_pin 4    // q2 pin on the MT8870 DTMF
 #define q3_pin 5    // q3 pin on the MT8870 DTMF
-#define q4_pin 6    // q4 pin on the MT8870 DTMF
+#define q4_pin 6    // q4 pin on the MT8870 DTMF - Least significant bit in 4-bit output
 
 // Time constants
-const float mult_time = 1; // use this to slow down the output for testing.
+const float mult_time = DEBUG ? 2.4 : 1; // use this to slow down the output for testing.
+
 const int pulse_length_make = 33 * mult_time;
 const int pulse_length_break = 66 * mult_time;
 const int pulse_hangup_delay = 1000; // the time taken for a hangup.
@@ -63,58 +71,53 @@ bool is_hung_up = false;
 // Declare functions
 void dtmf_interrupt();
 void hang_up();
-char read_dtmf_inputs();
+char read_mt8870();
 void clear_buffer();
 void number_pulse_out(int);
 
 void setup() {
   Serial.begin(9600);
-  Serial.println("Hello, im alive!");
+  Serial.println("Begin setup()");
 
   // Define input pins for DTMF Decoder pins connection
-  pinMode(stq_pin, INPUT); // connect to Std pin
+  pinMode(std_pin, INPUT); // connect to Std pin
   pinMode(q4_pin, INPUT); // connect to Q4 pin
   pinMode(q3_pin, INPUT); // connect to Q3 pin
   pinMode(q2_pin, INPUT); // connect to Q2 pin
   pinMode(q1_pin, INPUT); // connect to Q1 pin
 
   // Attaches interrupt to set flag with dtmf_interrupt
-  attachInterrupt(digitalPinToInterrupt(stq_pin), dtmf_interrupt, RISING);
+  attachInterrupt(digitalPinToInterrupt(std_pin), dtmf_interrupt, RISING);
 
   hang_up();
+  Serial.println("Done setup()");
 }
-bool done=false;
 
+/**
+ * Main loop
+ * React to interrupt flag, read device, send pulses.
+ * Hang-up when idle.
+ */
 void loop() {
-  // TESTING FOR MANUAL INTERRUPT
-  /*
-  if (!done){
-    if (millis() > 4000)
-    {
-      Serial.println("before interrupt call");
-      // testy test for the interrupts
-      dtmf_interrupt();
-      done=true;
-    }
-  }
-  */
-
   if (dtmf_received) {
     // Resets interrupt flag for next input.
     dtmf_received = false;
 
+    Serial.println();
+    Serial.println("DTMF data is ready (interrupt fired on StD pin)");
+
     // Persist this time, so we know the last time we have received a dial.
     last_dialed_time = millis();
 
-    // Prevent queue being modified while we're reading stuff
-    noInterrupts();
-
     // add_key() will add the given key to the queue.
-    // read_dtmf_inputs() will read the input pins and output the char (0-9, #, *)
-    add_key(read_dtmf_inputs());
+    // read_mt8870() will read the input pins and output the char (0-9, #, *)
+    char phone_character = read_mt8870();
+    if (phone_character == '*') {
+      Serial.println("Ignoring * button.");
+    } else {
+      add_key(phone_character);
+    }
 
-    //Turn interrupts back on
-    interrupts();
   }
 
   // If enough time has elapsed since last DTMF, send buffer via pulses
@@ -124,7 +127,7 @@ void loop() {
     clear_buffer();
   }
 
-  // Hang up if the user hasnt pushed keys in the allotted time.
+  // Hang up if the user hasn't pushed keys in the allotted time.
   if ( pulse_done_time > 0 && ( ( millis() - pulse_done_time ) > user_idle_timeout ) ) {
     hang_up();
   }
@@ -161,7 +164,7 @@ void pulse_exchange(char buf[], int num_chars) {
 }
 
 void number_pulse_out(int number_pressed) {
-  Serial.print("Dialing digit: ");
+  Serial.print("Pulse digit: ");
   Serial.println(number_pressed);
 
   pick_up_phone();
@@ -169,10 +172,16 @@ void number_pulse_out(int number_pressed) {
   // Send an appropriate pulse out for the specified number.
   for (int i = 0; i < number_pressed; i++)
   {
+    if (DEBUG) Serial.print("-");
     digitalWrite(PULSE_PIN, HIGH);
     delay(pulse_length_make);
+    if (DEBUG) Serial.print("_");
     digitalWrite(PULSE_PIN, LOW);
     delay(pulse_length_break);
+  }
+  if (DEBUG) {
+    Serial.println();
+    Serial.println("Done pulsing digit.");
   }
 
   // Keep track of when we're finished pulsing the output, so we can detect idle state
@@ -214,39 +223,78 @@ void dtmf_interrupt() {
   dtmf_received = true;
 }
 
-/*
- * Returns character of the button pressed, 0-9, #, *.
- * Returns 'E' for error.
+/**
+ * Return character of the button pressed, 0-9, #, *.
  */
-char read_dtmf_inputs() {
-  Serial.println("Hello, I'm in read_dtmf_inputs()!");
-  Serial.println();
+char read_mt8870() {
+  Serial.println("read_mt8870() pins Q1-Q4");
 
-  uint8_t number_pressed;
+  uint8_t mt_output_code;
 
-  // Is a small delay to let the digitalRead pins latch needed if listening to the StD signal?
-  delay(50);
+  // This delay is present in the example code, but I don't think it's needed.
+  //delay(150);
 
-  // Checks q1,q2,q3,q4 to see what number is pressed.
-  number_pressed = (
+  // Debug to help simulating DIP switches
+  // Almost worth using sprintf...
+  int Q1 = digitalRead(q1_pin);
+  int Q2 = digitalRead(q2_pin);
+  int Q3 = digitalRead(q3_pin);
+  int Q4 = digitalRead(q4_pin);
+  Serial.print("Q1-Q4: ");
+  Serial.print(Q1);
+  Serial.print(Q2);
+  Serial.print(Q3);
+  Serial.println(Q4);
+
+  // Convert the 4-bit binary value on pins q1,q2,q3,q4 to decimal.
+  // This is the number corresponding to the DTMF tone the MT8870 heard.
+  // Adapted from:
+  // https://microcontrollerslab.com/mt8870-dtmf-decoder-module-pinout-interfacing-with-arduino-features/#Arduino_Code
+  mt_output_code = (
     0x00 |
      (digitalRead(q4_pin) << 0) |
      (digitalRead(q3_pin) << 1) |
      (digitalRead(q2_pin) << 2) |
      (digitalRead(q1_pin) << 3)
   );
+  /*
+     Example inputs:
+     Q1 Q2 Q3 Q4   DEC   HEX
+      0  0  0  0 = 0          (invalid - chip sends 10 for zero)
+      0  0  0  1 = 1          "1" digit
+      0  0  1  0 = 2
+      0  0  1  1 = 3
+      0  1  0  0 = 4
+      ...
+      1  0  1  0 = 10   0x0A  "0" digit
+      1  0  0  0 = 11   0x0B  "*" symbol
+      1  1  0  0 = 12   0x0C  "#" symbol
+  */
 
-  // Place the number and terminating null character into the local input buffer
-  char ascii_buffer[8];
+  Serial.print("MT8870 chip output: ");
+  Serial.println(mt_output_code);
 
-  // Convert from integer into ASCII char array
-  itoa(number_pressed, ascii_buffer, 10);
+  if (mt_output_code < 1 || mt_output_code > 12) {
+    Serial.println("ERROR: value out of range [1..12]");
+    return 'E';
+  }
 
-  Serial.println("Button pressed: ");
-  Serial.print(ascii_buffer);
-
-  // Return the char value without the null terminating byte (first character of buffer)
-  return(ascii_buffer[0]);
+  switch (mt_output_code) {
+    case 12:
+      return '#';
+      break;
+    case 11:
+      return '*';
+      break;
+    case 10:
+      return '0';
+      break;
+    default:
+      // chars are really numbers 0-255 and ASCII digits are sequential starting at 0
+      // No conversion is required from integer to char here.
+      return '0' + mt_output_code;
+      break;
+  }
 }
 
 void add_key(char key){
@@ -266,5 +314,6 @@ void add_key(char key){
 
   Serial.print("g_dial_buffer = ");
   Serial.println(g_dial_buffer);
+
 }
   
